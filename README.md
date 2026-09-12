@@ -168,6 +168,16 @@ the v41 suite is **552 passed / 0 failed on both pristine and patched**.
   (prose c8 20.1 -> 11.0). This 14-layer build holds swap flat at ~1.0 GB through the same run.
 * **`du -sh` lies across hardlinked checkpoints.** Check `st_nlink` before deleting a build dir.
 
+## Credits
+
+This is built almost entirely on other people's work — **DeepSeek-AI** for the model, **Jundot**
+for both the [oMLX](https://github.com/jundot/omlx) runtime *and* the calibrated
+[oQ3e checkpoint](https://huggingface.co/Jundot/DeepSeek-V4.1-Flash-oQ3e-mtp) we derive from
+(231.1 GiB of our 309 GB is byte-identical to theirs), and **Apple/ml-explore** for MLX and Metal.
+
+**See [CREDITS.md](CREDITS.md) for the full list**, including the specific oMLX PRs this depends on
+and an honest accounting of the small part that is actually ours.
+
 ## License
 
 Tooling here is Apache-2.0. The base checkpoint and oMLX carry their own licenses.
