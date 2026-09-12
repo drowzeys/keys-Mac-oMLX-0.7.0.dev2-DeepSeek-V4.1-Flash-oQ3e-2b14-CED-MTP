@@ -107,9 +107,12 @@ sudo sysctl iogpu.wired_limit_mb=253952          # does not persist across reboo
 git clone https://github.com/jundot/omlx && cd omlx && git checkout 395ec2fd
 python -m venv .venv && .venv/bin/pip install "mlx==0.32.2" "nanobind==2.15.0" "cmake>=3.27"
 
-# 2. custom Metal kernels — a clone ships none, and everything silently falls back without them
-PATH=$PWD/.venv/bin:$PATH DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
-OMLX_WITH_CUSTOM_KERNEL=1 .venv/bin/python setup_all_kernels.py build_ext --inplace
+# 2. custom Metal kernels — a clone ships NONE, and everything silently falls back without them.
+#    Prebuilt (MLX 0.32.2 / cp311 / macOS 26 arm64) — skips the Xcode+nanobind+cmake build:
+./prebuilt-kernels/install.sh .
+#    ...or build from source if your ABI differs:
+# PATH=$PWD/.venv/bin:$PATH DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+# OMLX_WITH_CUSTOM_KERNEL=1 .venv/bin/python setup_all_kernels.py build_ext --inplace
 .venv/bin/python -c "from omlx.custom_kernels.glm_moe_dsa import fast as f; assert f.is_native_available()"
 
 # 3. requant (~30 s; needs the base checkpoint on disk)
@@ -126,6 +129,13 @@ overrunning it fills the volume mid-write.
 Building the kernels is worth **+52% prefill / −34% TTFT**, and `deepseek_v41_ced_prefill_enabled`
 a further **+45% / −31%**. CED requires an even layer count, `mid` in both kv- and index-source
 layers, and `compress_ratios[mid:] == 1`.
+
+## `prebuilt-kernels/`
+
+All five oMLX custom Metal kernel extensions, already compiled — 14 MB, drop-in via
+`install.sh`. Saves the Xcode/nanobind/cmake build and is worth **+52% prefill / −34% TTFT**.
+ABI-locked to MLX 0.32.2 / Python 3.11 / macOS 26 arm64; a mismatch fails silently, so
+**always assert `is_native_available()`**. See [prebuilt-kernels/README.md](prebuilt-kernels/README.md).
 
 ## `omlx-patch/expert_cache.py`
 
