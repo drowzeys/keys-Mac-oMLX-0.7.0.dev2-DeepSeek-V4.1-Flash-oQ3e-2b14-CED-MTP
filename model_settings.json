@@ -1,0 +1,9 @@
+{
+  "dsv41-flash-2b14": {
+    "mtp_enabled": true,
+    "mtp_num_draft_tokens": 7,
+    "deepseek_v41_engram_ssd_offload": true,
+    "deepseek_v41_expert_ssd_offload": false,
+    "deepseek_v41_ced_prefill_enabled": true
+  }
+}
