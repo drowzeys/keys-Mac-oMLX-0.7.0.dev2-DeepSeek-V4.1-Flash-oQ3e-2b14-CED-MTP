@@ -13,6 +13,7 @@ that does not fit the machine as published — plus the tooling and measurements
 | Resident weights | **217.77 GB** (Engram on NVMe, zero expert paging) |
 | Speculation | DSpark MTP, built into the checkpoint, `mtp_num_draft_tokens=7` |
 | Serving | see **[SERVING.md](SERVING.md)** — two non-obvious requirements |
+| **Usable context** | **~16–40K tokens** — see **[LIMITS.md](LIMITS.md)** before wiring an agent at it |
 
 ## Why a rebuild was needed
 
@@ -167,6 +168,16 @@ the v41 suite is **552 passed / 0 failed on both pristine and patched**.
   sustained 8-way load: free memory hit 9%, swap climbed 5 MB -> 1.5 GB and throughput collapsed
   (prose c8 20.1 -> 11.0). This 14-layer build holds swap flat at ~1.0 GB through the same run.
 * **`du -sh` lies across hardlinked checkpoints.** Check `st_nlink` before deleting a build dir.
+
+## Limits
+
+This model leaves only **~5 GB** of working set on a 256 GB machine (217.76 GB resident against a
+~222.7 GB throttle threshold). At ~505 KB/token of prefill working set that means **~16K tokens
+comfortable, ~40K usable** — not the 1M the config advertises. Past that oMLX shrinks the prefill
+chunk to a 32-token floor and requests that took 5–8 s start taking minutes.
+
+It is not a context-code problem: Qwen3.8-27B leaves 222 GiB free on the same Mac and does 256K
+fine. This model is 10× bigger. **Read [LIMITS.md](LIMITS.md) before pointing an agent at it.**
 
 ## Credits
 
