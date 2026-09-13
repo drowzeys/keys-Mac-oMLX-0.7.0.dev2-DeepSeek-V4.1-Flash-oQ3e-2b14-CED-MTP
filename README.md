@@ -1,4 +1,4 @@
-# keys-Mac-Studio-M3-Ultra-DeepSeek-V4.1-Flash-oQ3e-2b14
+# keys-Mac-oMLX-0.7.0.dev2-DeepSeek-V4.1-Flash-oQ3e-2b27-CED-MTP
 
 Running **DeepSeek-V4.1-Flash (763B)** on a **single 256 GB Mac Studio M3 Ultra** — a checkpoint
 that does not fit the machine as published — plus the tooling and measurements that got it there.
