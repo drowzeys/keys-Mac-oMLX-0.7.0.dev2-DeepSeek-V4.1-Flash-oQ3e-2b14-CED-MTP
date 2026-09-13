@@ -1,67 +1,63 @@
-# Memory budget and context limits
+# Memory budget and context
 
-**Read this before wiring an agent at it.** The model fits; the *working set* is what runs out.
+**Corrected.** An earlier revision of this file claimed a ~40K context ceiling. That was wrong about
+the cause, and the fix changed the answer entirely: **404,805 tokens verified at 805 tok/s.**
 
-## The budget on a 256 GB Mac Studio
+## KV storage is not the constraint
 
-| | |
-|---|---|
-| Machine RAM | 238.4 GiB (256 GB) |
-| Metal wired cap | 248.0 GiB (`iogpu.wired_limit_mb=253952`) |
-| **Hard refuse above** | **223.2 GiB / 239.7 GB** — 90% of the wired cap |
-| **Throttles above** | ~207 GiB / **222.7 GB** — oMLX "sizing target", dynamic |
-| This model, resident | **217.76 GB** |
-| **Left for working set** | **~5 GB** |
+The architecture is built for 1M (YaRN factor 16 over a 65,536 base), and its KV is tiny because only
+**4 layers** (`kv_source_layer_ids = [2, 8, 14, 20]`) produce shared compressed KV; every layer's
+local attention is a fixed 128-token sliding window that never grows:
 
-Prefill working set costs **~505 KB/token** (KV is already FP8/FP4-packed; this is measured, not
-theoretical). So ~5 GB buys roughly:
+| context | global KV (~2.0 KB/token, shared) |
+|---:|---:|
+| 65,536 | 0.13 GB |
+| 262,144 | 0.54 GB |
+| 1,048,576 | 2.15 GB |
 
-| context | working set | verdict |
-|---|---:|---|
-| 10K tok | 5 GB | comfortable |
-| 16K tok | 7.9 GB | fine in practice |
-| **~40K tok** | 19.7 GB | **observed ceiling** |
-| 64K tok | 30.8 GB | throttles hard |
-| 256K tok | 123 GB | impossible |
+## The real constraint is the prefill working set
 
-## What "over the limit" looks like
-
-It does **not** crash. oMLX shrinks the prefill chunk to keep the working set bounded:
+Prefill costs **~505 KB/token** of *transient* activation memory for the chunk in flight. When the
+model leaves too little headroom, oMLX does not fail — it shrinks the chunk:
 
 ```
 Prefill throttled: chunk 2048 -> 32 (usage 218.18GB vs sizing target 213.61GB, per_token=505.0KB)
 ```
 
-At a 32-token floor a 41K prompt needs ~1,300 chunks — one request took **226 s**, and the server
-looks hung. It is not hung, it is crawling. Symptom to recognise: requests that were 5–8 s suddenly
-take minutes, and swap climbs.
+At a 32-token floor a 41K prompt needs ~1,300 chunks. That is what looked like a context ceiling.
+**It was a throughput collapse, not a capacity limit.**
 
-## Why this model and not others on the same Mac
+Measured, same machine, same prompt:
 
-Nothing about the context code changed. The weights just leave nothing behind:
+| prompt | 14-layer (197.8 GiB free → throttled) | **27-layer (46 GB headroom)** |
+|---:|---:|---:|
+| 25,949 tok | 217.6 s @ 119 tok/s | **45.0 s @ 576 tok/s** |
+| 80,996 tok | — | 97.4 s @ 831 tok/s |
+| 212,256 tok | — | 252.6 s @ 840 tok/s |
+| **404,805 tok** | — | **502.7 s @ 805 tok/s** |
 
-| model | resident | left for working set | usable context |
-|---|---:|---:|---|
-| Qwen3.8-27B oQ4e | 15.8 GiB | 222.6 GiB | 256K+ |
-| DeepSeek-V4-Flash oQ4e | 143.4 GiB | 95.0 GiB | 1M |
-| **this build** | **202.7 GiB** | **35.7 GiB** | **~40K** |
+Prefill gets *faster* at longer context (better chunk amortization), then holds ~800–840 tok/s.
 
-## Configuring a client
+## Budget on a 256 GB Mac Studio
 
-Set the client's declared context to what the box can actually serve, **not** the model's 1M window.
-Leaving it at 1M means the client never compresses history, the prompt grows unbounded, and you hit
-the throttle wall mid-session.
+| | |
+|---|---|
+| Machine RAM | 238.4 GiB (256 GB) |
+| Metal wired cap | 248.0 GiB (`iogpu.wired_limit_mb=253952`) |
+| Enforcer ceiling (tier=safe) | ~243.8 GB |
+| This model, resident | **197.19 GB** |
+| **Headroom** | **~46 GB** — enough to keep a full 2048-token chunk |
 
-Hermes enforces a **64K minimum**, so `context_length: 64000` is the floor that is accepted; real
-prompts stay ~16K and sessions work, but history beyond ~40K will degrade.
+Practical guidance: **500K+ is reachable; budget ~8.4 min of prefill for 400K.** Set your client's
+declared context to what you will actually use — an unbounded window means history grows until the
+chunk throttles.
 
-## To actually serve 64K+
+## ⚠️ Two traps that masquerade as OOM
 
-The model must come down to **≤ ~190 GB**. Note that **2-bit requant alone cannot get there**: only
-27 of 40 MoE layers are quantizable (13 are structurally protected — see the main README), and all 27
-at 2-bit still lands at ~210.8 GB. Options:
-
-1. **SSD-page routed experts** (`omlx-patch/expert_cache.py`) — frees ~5.5 GiB per paged layer, at a
-   throughput cost that depends only on the RAM deficit.
-2. **A lower-bit base checkpoint** (oQ2e-class) if one becomes available.
-3. **Accept ~16–40K context**, which is what this build ships as.
+1. **A stale server holds the RAM.** oMLX renames itself via `setproctitle` to **`omlx-server`**, so
+   `pkill -f "omlx.cli"` misses it and it survives, holding ~200 GB. The next launch then reports
+   `dynamic memory ceiling (25.24GB) ... only 25.09GB is reclaimable` and returns **HTTP 507**.
+   Always match `"omlx-server|omlx.cli"`, and `kill -9` (it ignores SIGTERM).
+2. **`du -sh` lies across hardlinked checkpoints.** Check `st_nlink`. And check the rewrite payload
+   *before* building: a from-scratch 27-layer build needs **179.6 GiB**, but building incrementally
+   from the 14-layer variant needs only **91.4 GiB**.

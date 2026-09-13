@@ -10,10 +10,10 @@ that does not fit the machine as published — plus the tooling and measurements
 | Runtime | [oMLX](https://github.com/jundot/omlx) **0.7.0.dev2**, commit `395ec2fd` |
 | MLX | **0.32.2** (the kernels are ABI-coupled to this exact version) |
 | Host | Mac15,14 / M3 Ultra / 256 GB unified / macOS 26.6.2 |
-| Resident weights | **217.77 GB** (Engram on NVMe, zero expert paging) |
+| Resident weights | **197.19 GB** (Engram on NVMe, zero expert paging) |
 | Speculation | DSpark MTP, built into the checkpoint, `mtp_num_draft_tokens=7` |
 | Serving | see **[SERVING.md](SERVING.md)** — two non-obvious requirements |
-| **Usable context** | **~16–40K tokens** — see **[LIMITS.md](LIMITS.md)** before wiring an agent at it |
+| **Verified context** | **404,805 tokens** @ 805 tok/s prefill — see [LIMITS.md](LIMITS.md) |
 
 ## Why a rebuild was needed
 
@@ -32,13 +32,14 @@ Two levers were measured. Only one of them works:
 
 ## The build
 
-14 of 40 MoE layers, routed experts only:
+**27 of 40** MoE layers, routed experts only (every layer that is not structurally load-bearing):
 
 ```
-7, 15, 19, 21, 22, 23, 25, 26, 27, 29, 30, 31, 33, 34
+3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19,
+21, 22, 23, 25, 26, 27, 29, 30, 31, 33, 34, 35
 ```
 
-Sheds **22.15 GiB** across 42 modules in ~30 s. Only the 20 shards holding those layers are
+Sheds **42.7 GiB** across 81 modules. Built incrementally from the 14-layer variant in ~40 s. Only the 20 shards holding those layers are
 rewritten; the other 45 are hardlinked.
 
 ### Layer choice is structural, not numerical
@@ -60,21 +61,34 @@ on code despite being 1.8x smaller.
 
 ## Results
 
-Single stream, 256 max_tokens, temp 0, medians of 3 (rep 0 discarded):
+Single stream, 256 max_tokens, temp 0:
 
-| | paged 3b | **this build** |
-|---|---:|---:|
-| prose | 15.45 | **25.69** tok/s |
-| code | 10.18 | **29.08** tok/s |
-| prefill (1893 tok) | 227 | **551** tok/s |
-| TTFT @1893 tok | 8.34 s | **3.43 s** |
+| | paged 3b | 14-layer 2b | **this build (27-layer)** |
+|---|---:|---:|---:|
+| prose | 15.45 | 25.69 | **23.18** tok/s |
+| code | 10.18 | 29.08 | **25.27** tok/s |
+| TTFT (short) | 3.53 s | 0.74 s | **0.80 s** |
+| resident | — | 217.77 GB | **197.19 GB** |
 
 Concurrency (aggregate tok/s):
 
 | task | c=1 | c=2 | c=4 | c=8 |
 |---|---:|---:|---:|---:|
-| prose | 24.01 | 19.73 | 16.19 | 19.12 |
-| code | 26.87 | 19.60 | 18.88 | 19.11 |
+| prose | 21.69 | 19.33 | 19.09 | 19.26 |
+| code | 23.26 | 19.67 | 19.06 | 19.20 |
+
+**Long context — the reason for 27 layers.** Freeing 20.6 GiB stops oMLX throttling the prefill
+chunk, which is what actually gated long prompts:
+
+| prompt | 14-layer (throttled) | **27-layer** |
+|---:|---:|---:|
+| 25,949 tok | 217.6 s @ 119 tok/s | **45.0 s @ 576 tok/s** |
+| 80,996 tok | — | **97.4 s @ 831 tok/s** |
+| 212,256 tok | — | **252.6 s @ 840 tok/s** |
+| **404,805 tok** | — | **502.7 s @ 805 tok/s** |
+
+MTP acceptance: **75.1% code / 55.2% prose** (down from 81–85% / 64% at 14 layers — more 2-bit
+layers draft worse, the expected cost).
 
 **Aggregate saturates ~19.5 regardless of batch, and c=8 is no faster than c=1.** That is not
 contention and not I/O — Engram profiling put the n-gram path at 0.4% of runtime with zero lock wait
@@ -171,13 +185,12 @@ the v41 suite is **552 passed / 0 failed on both pristine and patched**.
 
 ## Limits
 
-This model leaves only **~5 GB** of working set on a 256 GB machine (217.76 GB resident against a
-~222.7 GB throttle threshold). At ~505 KB/token of prefill working set that means **~16K tokens
-comfortable, ~40K usable** — not the 1M the config advertises. Past that oMLX shrinks the prefill
-chunk to a 32-token floor and requests that took 5–8 s start taking minutes.
+**404,805 tokens verified at 805 tok/s.** KV storage was never the constraint — only 4 layers produce
+shared compressed KV (~2.0 KB/token), so 1M context is ~2.15 GB. The constraint is the **prefill
+working set** (~505 KB/token): when the model leaves too little headroom oMLX shrinks the prefill
+chunk to a 32-token floor, and long prompts collapse to ~119 tok/s. Freeing 20.6 GiB stops that.
 
-It is not a context-code problem: Qwen3.8-27B leaves 222 GiB free on the same Mac and does 256K
-fine. This model is 10× bigger. **Read [LIMITS.md](LIMITS.md) before pointing an agent at it.**
+See **[LIMITS.md](LIMITS.md)** for the full budget and two traps that masquerade as OOM.
 
 ## Credits
 

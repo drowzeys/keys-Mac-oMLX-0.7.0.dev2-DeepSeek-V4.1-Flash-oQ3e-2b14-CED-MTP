@@ -23,6 +23,8 @@ os.makedirs(DST, exist_ok=True)
 saved = 0
 for f in sorted(os.listdir(SRC)):
     s, d = os.path.join(SRC, f), os.path.join(DST, f)
+    if not os.path.isfile(s):
+        continue                      # skip dirs (e.g. .cache left by hf upload)
     if os.path.exists(d):
         os.remove(d)
     if f not in shards:
