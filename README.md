@@ -5,7 +5,7 @@ that does not fit the machine as published — plus the tooling and measurements
 
 | | |
 |---|---|
-| **Weights** | [`drowzeys/keys-Mac-oMLX-0.7.0.dev2-DeepSeek-V4.1-Flash-oQ3e-2b14-CED-MTP`](https://huggingface.co/drowzeys/keys-Mac-oMLX-0.7.0.dev2-DeepSeek-V4.1-Flash-oQ3e-2b14-CED-MTP) — 309 GB, ready to serve |
+| **Weights** | [`drowzeys/keys-Mac-oMLX-0.7.0.dev2-DeepSeek-V4.1-Flash-oQ3e-2b27-CED-MTP`](https://huggingface.co/drowzeys/keys-Mac-oMLX-0.7.0.dev2-DeepSeek-V4.1-Flash-oQ3e-2b27-CED-MTP) — 309 GB, ready to serve |
 | Base checkpoint | [`Jundot/DeepSeek-V4.1-Flash-oQ3e-mtp`](https://huggingface.co/Jundot/DeepSeek-V4.1-Flash-oQ3e-mtp) (330.90 GiB) |
 | Runtime | [oMLX](https://github.com/jundot/omlx) **0.7.0.dev2**, commit `395ec2fd` |
 | MLX | **0.32.2** (the kernels are ABI-coupled to this exact version) |
