@@ -65,8 +65,8 @@ Single stream, 256 max_tokens, temp 0:
 
 | | paged 3b | 14-layer 2b | **this build (27-layer)** |
 |---|---:|---:|---:|
-| prose | 15.45 | 25.69 | **23.18** tok/s |
-| code | 10.18 | 29.08 | **25.27** tok/s |
+| prose | 15.45 | 25.69 | **25.06** tok/s |
+| code | 10.18 | 29.08 | **29.78** tok/s |
 | TTFT (short) | 3.53 s | 0.74 s | **0.80 s** |
 | resident | — | 217.77 GB | **197.19 GB** |
 
@@ -87,8 +87,25 @@ chunk, which is what actually gated long prompts:
 | 212,256 tok | — | **252.6 s @ 840 tok/s** |
 | **404,805 tok** | — | **502.7 s @ 805 tok/s** |
 
-MTP acceptance: **75.1% code / 55.2% prose** (down from 81–85% / 64% at 14 layers — more 2-bit
-layers draft worse, the expected cost).
+### MTP draft depth: use `k=3`, not the default
+
+More 2-bit layers desynchronize the target from the (untouched) DSpark drafter, so acceptance falls.
+The fix is **shorter drafts** — with a weak drafter, a long draft just wastes verification. Measured
+on prose at temp 0.3:
+
+| `mtp_num_draft_tokens` | tok/s | tok/cycle | acceptance |
+|---:|---:|---:|---:|
+| **3** | **22.69** | **2.04** | **63.8%** |
+| 5 | 20.74 | 1.79 | 54.5% |
+| 7 | 19.77 | 1.76 | 52.2% |
+
+End to end that is prose **23.35 → 25.06 tok/s (+7.3%)**, acceptance 55.2 → 59.1%, with code
+**unaffected** (29.64 → 29.78). Unusually for spec-decode there is no per-task tradeoff here, so
+`k=3` is the shipped default.
+
+⚠️ Temperature also moves acceptance — **up**, counterintuitively (54.3% at temp 0 → 63.8% at
+temp 1.0), because rejection sampling accepts more when the target distribution is flatter. But
+throughput barely changes, so it is not a useful lever.
 
 **Aggregate saturates ~19.5 regardless of batch, and c=8 is no faster than c=1.** That is not
 contention and not I/O — Engram profiling put the n-gram path at 0.4% of runtime with zero lock wait
