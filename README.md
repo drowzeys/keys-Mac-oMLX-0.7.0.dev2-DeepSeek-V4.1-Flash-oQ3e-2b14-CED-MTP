@@ -65,17 +65,21 @@ Single stream, 256 max_tokens, temp 0:
 
 | | paged 3b | 14-layer 2b | **this build (27-layer)** |
 |---|---:|---:|---:|
-| prose | 15.45 | 25.69 | **25.06** tok/s |
-| code | 10.18 | 29.08 | **29.78** tok/s |
-| TTFT (short) | 3.53 s | 0.74 s | **0.80 s** |
+| prose | 15.45 | 25.69 | **25.08** tok/s |
+| code | 10.18 | 29.08 | **29.85** tok/s |
+| TTFT (short) | 3.53 s | 0.74 s | **0.78 s** |
 | resident | — | 217.77 GB | **197.19 GB** |
 
 Concurrency (aggregate tok/s):
 
 | task | c=1 | c=2 | c=4 | c=8 |
 |---|---:|---:|---:|---:|
-| prose | 21.69 | 19.33 | 19.09 | 19.26 |
-| code | 23.26 | 19.67 | 19.06 | 19.20 |
+| prose agg | 23.38 | 19.64 | 19.06 | 19.21 |
+| code agg | 27.36 | 19.64 | 19.03 | 19.20 |
+| per-stream | 25.08 / 29.85 | 10.27 | 4.90 | 2.49 |
+| TTFT | 0.78–0.81 s | 1.14 s | 1.46 s | 3.89 s |
+
+All numbers at the shipped `mtp_num_draft_tokens: 3`. MTP acceptance **75.4% code / 59.1% prose**.
 
 **Long context — the reason for 27 layers.** Freeing 20.6 GiB stops oMLX throttling the prefill
 chunk, which is what actually gated long prompts:

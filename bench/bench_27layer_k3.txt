@@ -1,0 +1,11 @@
+warmup...
+task   conc  agg tok/s  per-stream   ttft s  tokens  wall s
+prose     1      23.38       25.08     0.78     256    11.0
+prose     2      19.64       10.26     1.14     512    26.1
+prose     4      19.06        4.90     1.46    1024    53.7
+prose     8      19.21        2.49     3.89    2048   106.6
+code      1      27.36       29.85     0.81     256     9.4
+code      2      19.64       10.27     1.16     512    26.1
+code      4      19.03        4.90     1.51    1024    53.8
+code      8      19.20        2.49     3.91    2048   106.7
+bench complete
